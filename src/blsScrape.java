@@ -12,22 +12,23 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.firefox.FirefoxDriver;
 
+
+
 public class blsScrape {
 
-	public static void main(String[] args) {
-		Boolean myDebug = false;
-		
-		WebDriver driver = new FirefoxDriver();
-		ArrayList<String> myURLList = new ArrayList<String>();
-		ArrayList<String> uniqueURLList = new ArrayList<String>();
+	public static ArrayList<String> getLinks(String myPage, String myLinkFilter){
+		Boolean myGetLinksDebug = false;
+		WebDriver myGetLinksDriver = new FirefoxDriver();
+		ArrayList<String> myGetLinksURLList = new ArrayList<String>();
+		ArrayList<String> myGetLinksUniqueURLList = new ArrayList<String>();
 
         // And now use this to visit Index site
-        driver.get("http://www.bls.gov/ooh/a-z-index.htm");
+        myGetLinksDriver.get(myPage);
 
         // Find the links  by a HTML element
-        List<WebElement> myLinks = driver.findElements(By.tagName("a"));
+        List<WebElement> myLinks = myGetLinksDriver.findElements(By.tagName("a"));
 
-        if(myDebug){
+        if(myGetLinksDebug){
 	        //A little Progress indicator.
 	        System.out.println("Number of links: " + myLinks.size());
         }
@@ -36,25 +37,20 @@ public class blsScrape {
         for (WebElement myElement : myLinks){
         	String myLink = myElement.getAttribute("href");;
         	
-            if(myDebug){
+            if(myGetLinksDebug){
 	            //A little Progress indicator.
 	            System.out.println("Processing Link: " + myLink);
             }
-            
-	        //Pattern grabs just the Occupational Outlook Handbook links
-	        String linkPattern = "(/ooh/[^\"]+)";
-	        Pattern linkRegex = Pattern.compile(linkPattern);
-	        Matcher linkMatch = linkRegex.matcher(myLink);
 
-	        //Have I found a link to a Occupational Outlook Handbook career?
-	        if(linkMatch.find()){
-		        //I Have found one now add back the domain.
-		        myLink = "http://www.bls.gov" + linkMatch.group(1);
-		        myURLList.add(myLink);
+            //Have I found a link to a Occupational Outlook Handbook career?
+	        if(myLink.contains(myLinkFilter)){
+
+	        	//I Have found one now add back the domain.
+		        myGetLinksURLList.add(myLink);
 		        
-	            if(myDebug){
+	            if(myGetLinksDebug){
 	            	//A little Progress indicator.
-	            	System.out.println("I found an OOH link: " + myLink);
+	            	System.out.println("I found a Filter link: " + myLink);
 	            }
 	        } else {
 	        	//This is a Link on the page but not to a OOH Career so I'm skipping it.
@@ -62,12 +58,20 @@ public class blsScrape {
 	        }
 
         }
-
+        myGetLinksDriver.close();
+        
         //Unfortunately the page has multiple references to the same URL
         //HashSet doesn't allow Duplicate values.
         HashSet<String> hs = new HashSet<String>();
-        hs.addAll(myURLList);
-        uniqueURLList.addAll(hs);
+        hs.addAll(myGetLinksURLList);
+        myGetLinksUniqueURLList.addAll(hs);
+		return myGetLinksUniqueURLList;
+		
+	}
+	
+	
+	public static void main(String[] args) {
+		ArrayList<String> uniqueURLList = blsScrape.getLinks("http://www.bls.gov/ooh/a-z-index.htm","/ooh/");
 
         // Write the data to file
         FileWriter writer = null;
@@ -88,7 +92,8 @@ public class blsScrape {
 
         //A little Progress indicator
         System.out.println("Number of unique links to process:" + uniqueURLList.size());
-        
+
+    	WebDriver myMainDriver = new FirefoxDriver();
         //Go get the data from the individual pages
         for (String myURL : uniqueURLList){
         	String jobTitle = null;
@@ -128,17 +133,17 @@ public class blsScrape {
         	}
         	
         	//Get the HTML of the page we want
-        	driver.get(myURL);
+        	myMainDriver.get(myURL);
         	
         	//In this example we want the Articles HTML segments from the page.
-        	List<WebElement> myArticles = driver.findElements(By.tagName("article"));
+        	List<WebElement> myArticles = myMainDriver.findElements(By.tagName("article"));
         	for (WebElement article : myArticles){
 
         		//Initial request was for just the text.
         		//String data = article.getText();
 
         		//Recent request was for the HTML that was between the Article tag.
-	            String data = (String)((JavascriptExecutor)driver).executeScript("return arguments[0].innerHTML;", article);
+	            String data = (String)((JavascriptExecutor)myMainDriver).executeScript("return arguments[0].innerHTML;", article);
 
 	            try {
 	            	writer.write("<article><![CDATA[\n");
@@ -149,10 +154,7 @@ public class blsScrape {
 	            }
         	} // End of each article Loop
         }//End of each uniqueURLList Loop
-
-        //Quit the WebDriver
-        driver.quit();
-        
+    	myMainDriver.close();
         //Write the file XML footer
         try {
         	writer.write("</jobs>\n");
