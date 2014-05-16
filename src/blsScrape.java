@@ -12,13 +12,122 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.firefox.FirefoxDriver;
 
-
-
 public class blsScrape {
+	
+	public static void main(String[] args) {
+        FileWriter myWriter = null;
+		WebDriver myDriver = new FirefoxDriver();
+		String myFile = "output.xml";
+		ArrayList<String> uniqueURLList = null;
+		ArrayList<String> myURLArticles = null;
+		
+        //open file
+        try {
+        	myWriter = new FileWriter(myFile);
+        } catch (IOException e) {
+        	e.printStackTrace();
+        }
+		
+		//Get the links from the main index page.
+		uniqueURLList = blsScrape.getLinks("http://www.bls.gov/ooh/a-z-index.htm","/ooh/", myDriver);
 
-	public static ArrayList<String> getLinks(String myPage, String myLinkFilter){
-		Boolean myGetLinksDebug = false;
-		WebDriver myGetLinksDriver = new FirefoxDriver();
+		writeHeader(myFile, myWriter);
+		//For each Unique URL get the Articles.
+        for (String myURL : uniqueURLList){
+        	//We don't want to crash their site and scraping HTML is hard work so lets take a nap.
+        	try {
+        		// thread to sleep for 4 seconds.
+        		Thread.sleep(4000);
+        	} catch (Exception e) {
+        		System.out.println(e);
+        	}
+        	myURLArticles = getArticles(myURL, myDriver);
+        	writeData(myURLArticles, myURL, myFile, myWriter);
+        }
+        writeFooter(myFile, myWriter);
+        try {
+			myWriter.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		myDriver.close();
+	}//End of Main
+	
+	public static void writeData(ArrayList<String> myWriteDataArticles, String myWriteDataURL, String myWriteDataFileName, FileWriter myWriteDataWriter){
+		// Write the data to file
+
+        String myWriteDataJobTitle = null;
+
+    	//Get Job title from myURL
+    	String titlePattern = "([^\\/]+)[.]htm$";
+    	Pattern linkRegex = Pattern.compile(titlePattern);
+    	Matcher titleMatch = linkRegex.matcher(myWriteDataURL);
+    	//The name of the page to download, in the URL, is going to be the Job Title in this instance.
+    	if(titleMatch.find()){
+    		//I've found the title
+    		myWriteDataJobTitle = titleMatch.group(1);
+    	}
+    	try {
+    		myWriteDataWriter.write("<jobTitle>" + myWriteDataJobTitle + "</jobTitle>\n");
+    	} catch (IOException e) {
+    		e.printStackTrace();
+    	}
+       	try {
+       		myWriteDataWriter.write("<url><![CDATA[" + myWriteDataURL + "]]></url>\n");
+    	} catch (IOException e) {
+    		e.printStackTrace();
+    	}
+        for (String myArticle : myWriteDataArticles){
+	        try {
+	        	myWriteDataWriter.write("<article><![CDATA[\n");
+	        	myWriteDataWriter.write(myArticle);
+	        	myWriteDataWriter.write("\n]]></article>\n");
+	        } catch (IOException e) {
+	        	e.printStackTrace();
+	        }
+        }
+		
+	}
+	
+	public static void writeHeader(String myWriteHeaderFileName, FileWriter myWriteHeaderWriter){
+        //write XML header
+        try {
+        	myWriteHeaderWriter.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        	myWriteHeaderWriter.write("<jobs>\n");    
+        } catch (IOException e) {
+        	e.printStackTrace();
+        }
+	}
+	
+	public static void writeFooter(String myWriteFooterFileName, FileWriter myWriteFooterWriter){
+        //Write the file XML footer
+        try {
+        	myWriteFooterWriter.write("</jobs>\n");
+        } catch (IOException e) {
+        	e.printStackTrace();
+        }
+	}
+	
+	public static ArrayList<String> getArticles(String myGetArticlesURL,WebDriver myGetArticlesDriver){
+
+		ArrayList<String> myReturnArrayList = new ArrayList<String>();
+    	//Get the HTML of the page we want
+    	myGetArticlesDriver.get(myGetArticlesURL);
+    	
+    	//In this example we want the Articles HTML segments from the page.
+    	List<WebElement> myArticles = myGetArticlesDriver.findElements(By.tagName("article"));
+    	for (WebElement article : myArticles){
+
+    		//Get the HTML that was between the Article tag.
+            String data = (String)((JavascriptExecutor)myGetArticlesDriver).executeScript("return arguments[0].innerHTML;", article);
+            myReturnArrayList.add(data);
+
+    	}
+		return myReturnArrayList;
+	}
+	
+	public static ArrayList<String> getLinks(String myPage, String myLinkFilter, WebDriver myGetLinksDriver){
+
 		ArrayList<String> myGetLinksURLList = new ArrayList<String>();
 		ArrayList<String> myGetLinksUniqueURLList = new ArrayList<String>();
 
@@ -27,38 +136,22 @@ public class blsScrape {
 
         // Find the links  by a HTML element
         List<WebElement> myLinks = myGetLinksDriver.findElements(By.tagName("a"));
-
-        if(myGetLinksDebug){
-	        //A little Progress indicator.
-	        System.out.println("Number of links: " + myLinks.size());
-        }
+        //A little Progress indicator.
+        System.out.println("Number of links: " + myLinks.size());
         
         //Traverse Links grabbing the URL and making sure it is Unique
         for (WebElement myElement : myLinks){
         	String myLink = myElement.getAttribute("href");;
-        	
-            if(myGetLinksDebug){
-	            //A little Progress indicator.
-	            System.out.println("Processing Link: " + myLink);
-            }
-
-            //Have I found a link to a Occupational Outlook Handbook career?
+        	//Have I found a link to a Occupational Outlook Handbook career?
 	        if(myLink.contains(myLinkFilter)){
-
-	        	//I Have found one now add back the domain.
 		        myGetLinksURLList.add(myLink);
-		        
-	            if(myGetLinksDebug){
-	            	//A little Progress indicator.
-	            	System.out.println("I found a Filter link: " + myLink);
-	            }
+            	//A little Progress indicator.
+		        System.out.println("I found a Filter link: " + myLink);
 	        } else {
 	        	//This is a Link on the page but not to a OOH Career so I'm skipping it.
 		        continue;
 	        }
-
         }
-        myGetLinksDriver.close();
         
         //Unfortunately the page has multiple references to the same URL
         //HashSet doesn't allow Duplicate values.
@@ -66,102 +159,5 @@ public class blsScrape {
         hs.addAll(myGetLinksURLList);
         myGetLinksUniqueURLList.addAll(hs);
 		return myGetLinksUniqueURLList;
-		
 	}
-	
-	
-	public static void main(String[] args) {
-		ArrayList<String> uniqueURLList = blsScrape.getLinks("http://www.bls.gov/ooh/a-z-index.htm","/ooh/");
-
-        // Write the data to file
-        FileWriter writer = null;
-        //open file
-        try {
-        	writer = new FileWriter("output.xml");
-        } catch (IOException e) {
-        	e.printStackTrace();
-        }
-
-        //write XML header
-        try {
-        	writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-        	writer.write("<jobs>\n");    
-        } catch (IOException e) {
-        	e.printStackTrace();
-        }
-
-        //A little Progress indicator
-        System.out.println("Number of unique links to process:" + uniqueURLList.size());
-
-    	WebDriver myMainDriver = new FirefoxDriver();
-        //Go get the data from the individual pages
-        for (String myURL : uniqueURLList){
-        	String jobTitle = null;
-        	
-        	//We don't want to crash their site and scraping HTML is hard work so lets take a nap.
-        	try {
-        		// thread to sleep for 4 seconds.
-        		Thread.sleep(4000);
-        	} catch (Exception e) {
-        		System.out.println(e);
-        	}
-        	
-        	//A little progress indication and write the URL to the file
-        	System.out.println("Link to get: " + myURL);
-        	try {
-        		writer.write("<url><![CDATA[" + myURL + "]]></url>\n");
-        	} catch (IOException e) {
-        		e.printStackTrace();
-        	}
-        	
-        	//Get Job title from myURL
-        	String titlePattern = "([^\\/]+)[.]htm$";
-        	Pattern linkRegex = Pattern.compile(titlePattern);
-        	Matcher titleMatch = linkRegex.matcher(myURL);
-        	//The name of the page to download, in the URL, is going to be the Job Title in this instance.
-        	if(titleMatch.find()){
-        		//I've found the title
-        		jobTitle = titleMatch.group(1);
-        	}
-        	
-        	//A little progress indication and write the job title to the file
-        	System.out.println("Job Title: " + jobTitle);
-        	try {
-        		writer.write("<jobTitle>" + jobTitle + "</jobTitle>\n");
-        	} catch (IOException e) {
-        		e.printStackTrace();
-        	}
-        	
-        	//Get the HTML of the page we want
-        	myMainDriver.get(myURL);
-        	
-        	//In this example we want the Articles HTML segments from the page.
-        	List<WebElement> myArticles = myMainDriver.findElements(By.tagName("article"));
-        	for (WebElement article : myArticles){
-
-        		//Initial request was for just the text.
-        		//String data = article.getText();
-
-        		//Recent request was for the HTML that was between the Article tag.
-	            String data = (String)((JavascriptExecutor)myMainDriver).executeScript("return arguments[0].innerHTML;", article);
-
-	            try {
-	            	writer.write("<article><![CDATA[\n");
-	            	writer.write(data);
-	            	writer.write("\n]]></article>\n");
-	            } catch (IOException e) {
-	            	e.printStackTrace();
-	            }
-        	} // End of each article Loop
-        }//End of each uniqueURLList Loop
-    	myMainDriver.close();
-        //Write the file XML footer
-        try {
-        	writer.write("</jobs>\n");
-        	writer.close();         
-        } catch (IOException e) {
-        	e.printStackTrace();
-        }
-	}//End of Main
-
 }
